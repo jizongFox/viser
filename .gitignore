@@ -12,8 +12,8 @@ htmlcov
 .envrc
 .lvimrc
 .DS_Store
-.envrc
 .vite
 build
 src/viser/client/build
 src/viser/client/.nodeenv
+.idea
