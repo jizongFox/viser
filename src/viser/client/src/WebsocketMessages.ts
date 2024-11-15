@@ -100,6 +100,7 @@ export interface CameraFrustumMessage {
     fov: number;
     aspect: number;
     scale: number;
+    line_width: number;
     color: [number, number, number];
     image_media_type: "image/jpeg" | "image/png" | null;
     image_binary: Uint8Array | null;
@@ -126,6 +127,7 @@ export interface FrameMessage {
     axes_length: number;
     axes_radius: number;
     origin_radius: number;
+    origin_color: [number, number, number];
   };
 }
 /** Batched axes message.
@@ -299,9 +301,9 @@ export interface EnvironmentMapMessage {
   background: boolean;
   background_blurriness: number;
   background_intensity: number;
-  background_rotation: [number, number, number];
+  background_wxyz: [number, number, number, number];
   environment_intensity: number;
-  environment_rotation: [number, number, number];
+  environment_wxyz: [number, number, number, number];
 }
 /** Spot light message.
  *

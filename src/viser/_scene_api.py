@@ -181,6 +181,11 @@ class SceneApi:
         (similar to Blender, 3DS Max, ROS, etc), the most common alternative is
         +Y (OpenGL, Maya, etc).
 
+        In practice, the impact of this can improve (1) the ergonomics of
+        camera controls, which will default to the same up direction as the
+        scene, and (2) lighting, because the default lights and environment map
+        are oriented to match the scene's up direction.
+
         Args:
             direction: New up direction. Can either be a string (one of +x, +y,
                 +z, -x, -y, -z) or a length-3 direction vector.
@@ -491,9 +496,19 @@ class SceneApi:
         background: bool = False,
         background_blurriness: float = 0.0,
         background_intensity: float = 1.0,
-        background_rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        background_wxyz: tuple[float, float, float, float] | np.ndarray = (
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+        ),
         environment_intensity: float = 1.0,
-        environment_rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        environment_wxyz: tuple[float, float, float, float] | np.ndarray = (
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+        ),
     ) -> None:
         """Set the environment map for the scene. This will set some lights and background.
 
@@ -502,9 +517,9 @@ class SceneApi:
             background: Show or hide the environment map in the background.
             background_blurriness: Blur factor of the environment map background (0-1).
             background_intensity: Intensity of the background.
-            background_rotation: Rotation of the background in radians.
+            background_wxyz: Orientation of the background.
             environment_intensity: Intensity of the environment lighting.
-            environment_rotation: Rotation of the environment lighting in radians.
+            environment_wxyz: Orientation of the environment lighting.
         """
         self._websock_interface.queue_message(
             _messages.EnvironmentMapMessage(
@@ -512,9 +527,9 @@ class SceneApi:
                 background=background,
                 background_blurriness=background_blurriness,
                 background_intensity=background_intensity,
-                background_rotation=background_rotation,
+                background_wxyz=cast_vector(background_wxyz, 4),
                 environment_intensity=environment_intensity,
-                environment_rotation=environment_rotation,
+                environment_wxyz=cast_vector(environment_wxyz, 4),
             )
         )
 
@@ -526,7 +541,7 @@ class SceneApi:
         see :meth:`SceneApi.set_environment_map()`.
 
         Args:
-            enabled: True if user wants default lighting. False is user does
+            enabled: True if user wants default lighting. False if user does
                 not want default lighting.
         """
         self._websock_interface.queue_message(_messages.EnableLightsMessage(enabled))
@@ -739,6 +754,7 @@ class SceneApi:
         fov: float,
         aspect: float,
         scale: float = 0.3,
+        line_width: float = 2.0,
         color: RgbTupleOrArray = (20, 20, 20),
         image: np.ndarray | None = None,
         format: Literal["png", "jpeg"] = "jpeg",
@@ -746,6 +762,7 @@ class SceneApi:
         wxyz: tuple[float, float, float, float] | np.ndarray = (1.0, 0.0, 0.0, 0.0),
         position: tuple[float, float, float] | np.ndarray = (0.0, 0.0, 0.0),
         visible: bool = True,
+        *_removed_kwargs,
     ) -> CameraFrustumHandle:
         """Add a camera frustum to the scene for visualization.
 
@@ -754,7 +771,7 @@ class SceneApi:
         and coverage of a camera in the 3D space.
 
         Like all cameras in the viser Python API, frustums follow the OpenCV [+Z forward,
-        +X right, +Y down] convention. fov is vertical in radians; aspect is width over height
+        +X right, +Y down] convention. fov is vertical in radians; aspect is width over height.
 
         Args:
             name: A scene tree name. Names in the format of /parent/child can be used to
@@ -762,6 +779,7 @@ class SceneApi:
             fov: Field of view of the camera (in radians).
             aspect: Aspect ratio of the camera (width over height).
             scale: Scale factor for the size of the frustum.
+            line_width: Width of the frustum lines, in screen space. Defaults to `2.0`.
             color: Color of the frustum as an RGB tuple.
             image: Optional image to be displayed on the frustum.
             format: Format of the provided image ('png' or 'jpeg').
@@ -773,6 +791,12 @@ class SceneApi:
         Returns:
             Handle for manipulating scene node.
         """
+
+        if "line_thickness" in _removed_kwargs:
+            warnings.warn(
+                "The 'line_thickness' argument has been removed. Please use 'line_width' instead. Note that the units have been changed from world space to screen space.",
+                DeprecationWarning,
+            )
 
         if image is not None:
             media_type, binary = _encode_image_binary(
@@ -788,6 +812,7 @@ class SceneApi:
                 fov=fov,
                 aspect=aspect,
                 scale=scale,
+                line_width=line_width,
                 color=_encode_rgb(color),
                 image_media_type=media_type,
                 image_binary=binary,
@@ -802,6 +827,7 @@ class SceneApi:
         axes_length: float = 0.5,
         axes_radius: float = 0.025,
         origin_radius: float | None = None,
+        origin_color: RgbTupleOrArray = (236, 236, 0),
         wxyz: tuple[float, float, float, float] | np.ndarray = (1.0, 0.0, 0.0, 0.0),
         position: tuple[float, float, float] | np.ndarray = (0.0, 0.0, 0.0),
         visible: bool = True,
@@ -840,6 +866,7 @@ class SceneApi:
                 axes_length=axes_length,
                 axes_radius=axes_radius,
                 origin_radius=origin_radius,
+                origin_color=_encode_rgb(origin_color),
             ),
         )
         return FrameHandle._make(self, message, name, wxyz, position, visible)
@@ -1145,8 +1172,8 @@ class SceneApi:
                         name=name,
                         websock_interface=self._websock_interface,
                         bone_index=i,
-                        wxyz=bone_wxyzs[i],
-                        position=bone_positions[i],
+                        wxyz=bone_wxyzs[i].copy(),
+                        position=bone_positions[i].copy(),
                     )
                 )
                 for i in range(num_bones)

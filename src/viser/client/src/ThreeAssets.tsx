@@ -1,4 +1,4 @@
-import { Instance, Instances, shaderMaterial } from "@react-three/drei";
+import { Instance, Instances, Line, shaderMaterial } from "@react-three/drei";
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { Outlines } from "./Outlines";
 import React from "react";
@@ -54,7 +54,6 @@ function rgbToInt(rgb: [number, number, number]): number {
   return (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
 }
 const originGeom = new THREE.SphereGeometry(1.0);
-const originMaterial = new THREE.MeshBasicMaterial({ color: 0xecec00 });
 
 const PointCloudMaterial = /* @__PURE__ */ shaderMaterial(
   { scale: 1.0, point_ball_norm: 0.0 },
@@ -259,6 +258,7 @@ export const CoordinateFrame = React.forwardRef<
     axesLength?: number;
     axesRadius?: number;
     originRadius?: number;
+    originColor?: number;
   }
 >(function CoordinateFrame(
   {
@@ -266,6 +266,7 @@ export const CoordinateFrame = React.forwardRef<
     axesLength = 0.5,
     axesRadius = 0.0125,
     originRadius = undefined,
+    originColor = 0xecec00,
   },
   ref,
 ) {
@@ -276,9 +277,9 @@ export const CoordinateFrame = React.forwardRef<
         <>
           <mesh
             geometry={originGeom}
-            material={originMaterial}
             scale={new THREE.Vector3(originRadius, originRadius, originRadius)}
           >
+            <meshBasicMaterial color={originColor} />
             <OutlinesIfHovered />
           </mesh>
           <Instances limit={3}>
@@ -698,6 +699,7 @@ export const CameraFrustum = React.forwardRef<
     fov: number;
     aspect: number;
     scale: number;
+    lineWidth: number;
     color: number;
     imageBinary: Uint8Array | null;
     imageMediaType: string | null;
@@ -723,64 +725,62 @@ export const CameraFrustum = React.forwardRef<
   x /= volumeScale;
   y /= volumeScale;
   z /= volumeScale;
+  x *= props.scale;
+  y *= props.scale;
+  z *= props.scale;
 
-  function scaledLineSegments(points: [number, number, number][]) {
-    points = points.map((xyz) => [xyz[0] * x, xyz[1] * y, xyz[2] * z]);
-    return [...Array(points.length - 1).keys()].map((i) => (
-      <LineSegmentInstance
-        key={i}
-        start={new THREE.Vector3()
-          .fromArray(points[i])
-          .multiplyScalar(props.scale)}
-        end={new THREE.Vector3()
-          .fromArray(points[i + 1])
-          .multiplyScalar(props.scale)}
-        color={props.color}
-      />
-    ));
-  }
+  const hoveredRef = React.useContext(HoverableContext);
+  const [isHovered, setIsHovered] = React.useState(false);
+
+  useFrame(() => {
+    if (hoveredRef !== null && hoveredRef.current !== isHovered) {
+      setIsHovered(hoveredRef.current);
+    }
+  });
+
+  const frustumPoints: [number, number, number][] = [
+    // Rectangle.
+    [-1, -1, 1],
+    [1, -1, 1],
+    [1, -1, 1],
+    [1, 1, 1],
+    [1, 1, 1],
+    [-1, 1, 1],
+    [-1, 1, 1],
+    [-1, -1, 1],
+    // Lines to origin.
+    [-1, -1, 1],
+    [0, 0, 0],
+    [0, 0, 0],
+    [1, -1, 1],
+    // Lines to origin.
+    [-1, 1, 1],
+    [0, 0, 0],
+    [0, 0, 0],
+    [1, 1, 1],
+    // Up direction indicator.
+    // Don't overlap with the image if the image is present.
+    [0.0, -1.2, 1.0],
+    imageTexture === undefined ? [0.0, -0.9, 1.0] : [0.0, -1.0, 1.0],
+  ].map((xyz) => [xyz[0] * x, xyz[1] * y, xyz[2] * z]);
 
   return (
     <group ref={ref}>
-      <Instances limit={9}>
-        <meshBasicMaterial color={props.color} side={THREE.DoubleSide} />
-        <cylinderGeometry
-          args={[props.scale * 0.03, props.scale * 0.03, 1.0, 3]}
-        />
-        {scaledLineSegments([
-          // Rectangle.
-          [-1, -1, 1],
-          [1, -1, 1],
-          [1, 1, 1],
-          [-1, 1, 1],
-          [-1, -1, 1],
-        ])}
-        {scaledLineSegments([
-          // Lines to origin.
-          [-1, -1, 1],
-          [0, 0, 0],
-          [1, -1, 1],
-        ])}
-        {scaledLineSegments([
-          // Lines to origin.
-          [-1, 1, 1],
-          [0, 0, 0],
-          [1, 1, 1],
-        ])}
-        {scaledLineSegments([
-          // Up direction.
-          [0.0, -1.2, 1.0],
-          [0.0, -0.9, 1.0],
-        ])}
-      </Instances>
+      <Line
+        points={frustumPoints}
+        color={isHovered ? 0xfbff00 : props.color}
+        lineWidth={isHovered ? 1.5 * props.lineWidth : props.lineWidth}
+        segments
+      />
       {imageTexture && (
         <mesh
-          position={[0.0, 0.0, props.scale * z]}
+          // 0.999999 is to avoid z-fighting with the frustum lines.
+          position={[0.0, 0.0, z * 0.999999]}
           rotation={new THREE.Euler(Math.PI, 0.0, 0.0)}
         >
           <planeGeometry
             attach="geometry"
-            args={[props.scale * props.aspect * y * 2, props.scale * y * 2]}
+            args={[props.aspect * y * 2, y * 2]}
           />
           <meshBasicMaterial
             attach="material"
@@ -794,36 +794,6 @@ export const CameraFrustum = React.forwardRef<
     </group>
   );
 });
-
-function LineSegmentInstance(props: {
-  start: THREE.Vector3;
-  end: THREE.Vector3;
-  color: number;
-}) {
-  const desiredDirection = new THREE.Vector3()
-    .subVectors(props.end, props.start)
-    .normalize();
-  const canonicalDirection = new THREE.Vector3(0.0, 1.0, 0.0);
-  const orientation = new THREE.Quaternion().setFromUnitVectors(
-    canonicalDirection,
-    desiredDirection,
-  );
-
-  const length = props.start.distanceTo(props.end);
-  const midpoint = new THREE.Vector3()
-    .addVectors(props.start, props.end)
-    .divideScalar(2.0);
-
-  return (
-    <Instance
-      position={midpoint}
-      quaternion={orientation}
-      scale={[1.0, length, 1.0]}
-    >
-      <OutlinesIfHovered creaseAngle={0.0} />
-    </Instance>
-  );
-}
 
 export const HoverableContext =
   React.createContext<React.MutableRefObject<boolean> | null>(null);

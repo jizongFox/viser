@@ -147,6 +147,7 @@ function useObjectFactory(message: SceneNodeMessage | undefined): {
             axesLength={message.props.axes_length}
             axesRadius={message.props.axes_radius}
             originRadius={message.props.origin_radius}
+            originColor={rgbToInt(message.props.origin_color)}
           />
         ),
       };
@@ -281,6 +282,7 @@ function useObjectFactory(message: SceneNodeMessage | undefined): {
             fov={message.props.fov}
             aspect={message.props.aspect}
             scale={message.props.scale}
+            lineWidth={message.props.line_width}
             color={rgbToInt(message.props.color)}
             imageBinary={message.props.image_binary}
             imageMediaType={message.props.image_media_type}

@@ -186,6 +186,8 @@ class CameraFrustumProps:
     """Aspect ratio of the camera (width over height). Synchronized automatically when assigned."""
     scale: float
     """Scale factor for the size of the frustum. Synchronized automatically when assigned."""
+    line_width: float
+    """Width of the frustum lines. Synchronized automatically when assigned."""
     color: Tuple[int, int, int]
     """Color of the frustum as RGB integers. Synchronized automatically when assigned."""
     image_media_type: Optional[Literal["image/jpeg", "image/png"]]
@@ -228,6 +230,8 @@ class FrameProps:
     """Radius of each axis. Synchronized automatically when assigned."""
     origin_radius: float
     """Radius of the origin sphere. Synchronized automatically when assigned."""
+    origin_color: Tuple[int, int, int]
+    """Color of the origin sphere as RGB integers. Synchronized automatically when assigned."""
 
 
 @dataclasses.dataclass
@@ -491,9 +495,9 @@ class EnvironmentMapMessage(Message):
     background: bool
     background_blurriness: float
     background_intensity: float
-    background_rotation: tuple[float, float, float]
+    background_wxyz: Tuple[float, float, float, float]
     environment_intensity: float
-    environment_rotation: tuple[float, float, float]
+    environment_wxyz: Tuple[float, float, float, float]
 
 
 @dataclasses.dataclass
