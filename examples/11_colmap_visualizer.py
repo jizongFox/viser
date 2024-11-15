@@ -10,15 +10,18 @@ from typing import List
 
 import imageio.v3 as iio
 import numpy as np
+import open3d as o3d
 import tyro
-from tqdm.auto import tqdm
-
 import viser
 import viser.transforms as tf
+from tqdm.auto import tqdm
 from viser.extras.colmap import (
     read_cameras_binary,
+    read_cameras_text,
     read_images_binary,
+    read_images_text,
     read_points3d_binary,
+    read_points3D_text,
 )
 
 
@@ -38,9 +41,33 @@ def main(
     server.gui.configure_theme(titlebar_content=None, control_layout="collapsible")
 
     # Load the colmap info.
-    cameras = read_cameras_binary(colmap_path / "cameras.bin")
-    images = read_images_binary(colmap_path / "images.bin")
-    points3d = read_points3d_binary(colmap_path / "points3D.bin")
+    if (colmap_path / "cameras.bin").exists():
+        cameras = read_cameras_binary(colmap_path / "cameras.bin")
+    elif (colmap_path / "cameras.txt").exists():
+        cameras = read_cameras_text(colmap_path / "cameras.txt")
+    else:
+        raise ValueError("Could not find cameras file.")
+    if (colmap_path / "images.bin").exists():
+        images = read_images_binary(colmap_path / "images.bin")
+    elif (colmap_path / "images.txt").exists():
+        images = read_images_text(colmap_path / "images.txt")
+    else:
+        raise ValueError("Could not find images file.")
+    if colmap_path / "points3D.ply":
+        pcd = o3d.io.read_point_cloud((colmap_path / "points3D.ply").as_posix())
+        points = np.array(pcd.points)
+        colors = np.array(pcd.colors)
+    else:
+        if (colmap_path / "points3D.bin").exists():
+            points3d = read_points3d_binary(colmap_path / "points3D.bin")
+        elif (colmap_path / "points3D.txt").exists():
+            points3d = read_points3D_text(colmap_path / "points3D.txt")
+        else:
+            raise ValueError("Could not find points3D file.")
+
+        points = np.array([points3d[p_id].xyz for p_id in points3d])
+        colors = np.array([points3d[p_id].rgb for p_id in points3d])
+
     gui_reset_up = server.gui.add_button(
         "Reset up direction",
         hint="Set the camera control 'up' direction to the current camera's 'up'.",
@@ -57,9 +84,9 @@ def main(
     gui_points = server.gui.add_slider(
         "Max points",
         min=1,
-        max=len(points3d),
+        max=len(points),
         step=1,
-        initial_value=min(len(points3d), 50_000),
+        initial_value=min(len(points), 50_000),
     )
     gui_frames = server.gui.add_slider(
         "Max frames",
@@ -71,9 +98,6 @@ def main(
     gui_point_size = server.gui.add_slider(
         "Point size", min=0.01, max=0.1, step=0.001, initial_value=0.05
     )
-
-    points = np.array([points3d[p_id].xyz for p_id in points3d])
-    colors = np.array([points3d[p_id].rgb for p_id in points3d])
 
     point_mask = np.random.choice(points.shape[0], gui_points.value, replace=False)
     point_cloud = server.scene.add_point_cloud(
